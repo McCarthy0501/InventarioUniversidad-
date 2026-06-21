@@ -10,6 +10,28 @@ export interface Usuario {
   is_active: boolean
 }
 
+export interface Proveedor {
+  id: number
+  nombre: string
+  contacto: string
+  telefono: string
+  email: string
+  direccion: string
+  activo: boolean
+  fecha_creacion: string
+}
+
+export interface Cliente {
+  id: number
+  nombre: string
+  contacto: string
+  telefono: string
+  email: string
+  direccion: string
+  activo: boolean
+  fecha_creacion: string
+}
+
 export interface Categoria {
   id: number
   nombre: string
@@ -34,11 +56,15 @@ export interface Articulo {
   categoria_nombre: string | null
   ubicacion: number | null
   ubicacion_nombre: string | null
-  responsable: number | null
-  responsable_nombre: string | null
-  estado: 'disponible' | 'prestado' | 'mantenimiento' | 'dado_de_baja'
+  proveedor: number | null
+  proveedor_nombre: string | null
+  stock: number
+  stock_minimo: number
+  stock_bajo: boolean
+  precio_compra: number | null
+  precio_venta: number | null
+  estado: 'disponible' | 'agotado' | 'descontinuado'
   fecha_adquisicion: string | null
-  valor: number | null
   marca: string
   modelo: string
   numero_serie: string
@@ -54,11 +80,13 @@ export interface Movimiento {
   articulo_nombre: string
   usuario: number | null
   usuario_nombre: string | null
-  tipo: 'entrada' | 'salida' | 'traslado' | 'mantenimiento' | 'baja'
-  ubicacion_origen: number | null
-  ubicacion_origen_nombre: string | null
-  ubicacion_destino: number | null
-  ubicacion_destino_nombre: string | null
+  tipo: 'entrada' | 'salida' | 'ajuste' | 'devolucion'
+  cantidad: number
+  precio_unitario: number | null
+  proveedor: number | null
+  proveedor_nombre: string | null
+  cliente: number | null
+  cliente_nombre: string | null
   fecha: string
   motivo: string
   observaciones: string
@@ -66,11 +94,44 @@ export interface Movimiento {
 
 export interface DashboardData {
   total_articulos: number
-  articulos_por_estado: Record<string, number>
+  total_stock: number
+  articulos_stock_bajo: number
+  articulos_agotados: number
   articulos_por_categoria: Record<string, number>
   articulos_por_ubicacion: Record<string, number>
   ultimos_movimientos: Movimiento[]
-  valor_total: number
+  valor_inventario: number
+  tasa_dolar: number
+  ventas_hoy_unidades: number
+  ventas_hoy_usd: number
+  compras_hoy_unidades: number
+  compras_hoy_usd: number
+  ventas_semana_unidades: number
+  ventas_semana_usd: number
+  compras_semana_unidades: number
+  compras_semana_usd: number
+  ventas_mes_unidades: number
+  ventas_mes_usd: number
+  compras_mes_unidades: number
+  compras_mes_usd: number
+}
+
+export interface Configuracion {
+  id: number | null
+  tasa: number
+  fecha_actualizacion: string | null
+}
+
+export interface AlertaStock {
+  id: number
+  codigo_inventario: string
+  nombre: string
+  stock: number
+  stock_minimo: number
+  estado: 'bajo' | 'agotado'
+  categoria_nombre: string | null
+  proveedor_nombre: string | null
+  precio_compra: number | null
 }
 
 export interface LoginResponse {
@@ -92,10 +153,13 @@ export interface ArticuloFormData {
   descripcion: string
   categoria: number | null
   ubicacion: number | null
-  responsable: number | null
+  proveedor: number | null
+  stock: number
+  stock_minimo: number
+  precio_compra: number | null
+  precio_venta: number | null
   estado: string
   fecha_adquisicion: string | null
-  valor: number | null
   marca: string
   modelo: string
   numero_serie: string
@@ -104,9 +168,11 @@ export interface ArticuloFormData {
 
 export interface MovimientoFormData {
   articulo: number
-  tipo: 'entrada' | 'salida' | 'traslado' | 'mantenimiento' | 'baja'
-  ubicacion_origen: number | null
-  ubicacion_destino: number | null
+  tipo: 'entrada' | 'salida' | 'ajuste' | 'devolucion'
+  cantidad: number
+  precio_unitario: number | null
+  proveedor: number | null
+  cliente: number | null
   motivo: string
   observaciones: string
 }

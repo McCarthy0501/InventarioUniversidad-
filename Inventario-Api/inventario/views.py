@@ -1,30 +1,26 @@
 from rest_framework import viewsets, status, permissions, filters
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
-from rest_framework.permissions import AllowAny, IsAuthenticated, IsAdminUser
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import get_user_model, authenticate
-from django.db.models import Count, Sum, Q
+from django.db.models import Count, Sum, F, Q
+from django.utils import timezone
+from datetime import timedelta
 from django_filters.rest_framework import DjangoFilterBackend
 from openpyxl import Workbook
 from django.http import HttpResponse
 
-from .models import Categoria, Ubicacion, Articulo, Movimiento
+from .models import Categoria, Ubicacion, Articulo, Movimiento, Proveedor, Cliente, TasaDolar
 from .serializers import (
     LoginSerializer, UsuarioSerializer, UsuarioListSerializer,
+    ProveedorSerializer, ClienteSerializer,
     CategoriaSerializer, UbicacionSerializer,
     ArticuloListSerializer, ArticuloDetailSerializer,
-    MovimientoSerializer, DashboardSerializer
+    MovimientoSerializer, DashboardSerializer, TasaDolarSerializer
 )
 
 User = get_user_model()
-
-
-class IsAdminOrReadOnly(permissions.BasePermission):
-    def has_permission(self, request, view):
-        if request.method in permissions.SAFE_METHODS:
-            return request.user and request.user.is_authenticated
-        return request.user and request.user.is_authenticated and request.user.rol == 'admin'
 
 
 class IsAdminUser(permissions.BasePermission):
@@ -44,11 +40,9 @@ class IsAdminOrOperador(permissions.BasePermission):
 def login_view(request):
     serializer = LoginSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
-    username = serializer.validated_data['username']
-    password = serializer.validated_data['password']
-    user = authenticate(username=username, password=password)
+    user = authenticate(**serializer.validated_data)
     if user is None:
-        return Response({'error': 'Credenciales inválidas'}, status=status.HTTP_401_UNAUTHORIZED)
+        return Response({'error': 'Credenciales invalidas'}, status=status.HTTP_401_UNAUTHORIZED)
     if not user.is_active:
         return Response({'error': 'Usuario desactivado'}, status=status.HTTP_401_UNAUTHORIZED)
     refresh = RefreshToken.for_user(user)
@@ -69,7 +63,7 @@ def refresh_token_view(request):
         refresh = RefreshToken(refresh_token)
         return Response({'access': str(refresh.access_token)})
     except Exception:
-        return Response({'error': 'Token inválido o expirado'}, status=status.HTTP_401_UNAUTHORIZED)
+        return Response({'error': 'Token invalido o expirado'}, status=status.HTTP_401_UNAUTHORIZED)
 
 
 @api_view(['GET'])
@@ -82,9 +76,9 @@ def me_view(request):
 @permission_classes([IsAuthenticated])
 def dashboard_view(request):
     total_articulos = Articulo.objects.count()
-    articulos_por_estado = dict(
-        Articulo.objects.values('estado').annotate(count=Count('id')).values_list('estado', 'count')
-    )
+    total_stock = Articulo.objects.aggregate(total=Sum('stock'))['total'] or 0
+    articulos_stock_bajo = Articulo.objects.filter(stock__lte=F('stock_minimo'), stock__gt=0).count()
+    articulos_agotados = Articulo.objects.filter(stock=0).count()
     articulos_por_categoria = dict(
         Articulo.objects.values('categoria__nombre').annotate(count=Count('id'))
         .filter(categoria__isnull=False).values_list('categoria__nombre', 'count')
@@ -94,41 +88,101 @@ def dashboard_view(request):
         .filter(ubicacion__isnull=False).values_list('ubicacion__edificio', 'count')
     )
     ultimos_movimientos = Movimiento.objects.select_related(
-        'articulo', 'usuario', 'ubicacion_origen', 'ubicacion_destino'
+        'articulo', 'usuario', 'proveedor', 'cliente'
     ).order_by('-fecha')[:10]
-    valor_total = Articulo.objects.aggregate(total=Sum('valor'))['total'] or 0
+    valor_inventario = Articulo.objects.aggregate(
+        total=Sum(F('stock') * F('precio_compra'))
+    )['total'] or 0
+
+    tasa = TasaDolar.objects.first()
+    tasa_dolar = float(tasa.tasa) if tasa else 1.0
+
+    ahora = timezone.now()
+    hoy = ahora.date()
+    inicio_semana = hoy - timedelta(days=hoy.weekday())
+    inicio_mes = hoy.replace(day=1)
+
+    def stats_periodo(inicio):
+        ventas = Movimiento.objects.filter(tipo='salida', fecha__date__gte=inicio)
+        compras = Movimiento.objects.filter(tipo='entrada', fecha__date__gte=inicio)
+        return {
+            'ventas_unidades': ventas.aggregate(t=Sum('cantidad'))['t'] or 0,
+            'ventas_usd': float(ventas.aggregate(t=Sum(F('cantidad') * F('precio_unitario')))['t'] or 0),
+            'compras_unidades': compras.aggregate(t=Sum('cantidad'))['t'] or 0,
+            'compras_usd': float(compras.aggregate(t=Sum(F('cantidad') * F('precio_unitario')))['t'] or 0),
+        }
+
+    hoy_stats = stats_periodo(hoy)
+    semana_stats = stats_periodo(inicio_semana)
+    mes_stats = stats_periodo(inicio_mes)
 
     data = {
         'total_articulos': total_articulos,
-        'articulos_por_estado': articulos_por_estado,
+        'total_stock': total_stock,
+        'articulos_stock_bajo': articulos_stock_bajo,
+        'articulos_agotados': articulos_agotados,
         'articulos_por_categoria': articulos_por_categoria,
         'articulos_por_ubicacion': articulos_por_ubicacion,
         'ultimos_movimientos': MovimientoSerializer(ultimos_movimientos, many=True).data,
-        'valor_total': valor_total,
+        'valor_inventario': valor_inventario,
+        'tasa_dolar': tasa_dolar,
+        'ventas_hoy_unidades': hoy_stats['ventas_unidades'],
+        'ventas_hoy_usd': hoy_stats['ventas_usd'],
+        'compras_hoy_unidades': hoy_stats['compras_unidades'],
+        'compras_hoy_usd': hoy_stats['compras_usd'],
+        'ventas_semana_unidades': semana_stats['ventas_unidades'],
+        'ventas_semana_usd': semana_stats['ventas_usd'],
+        'compras_semana_unidades': semana_stats['compras_unidades'],
+        'compras_semana_usd': semana_stats['compras_usd'],
+        'ventas_mes_unidades': mes_stats['ventas_unidades'],
+        'ventas_mes_usd': mes_stats['ventas_usd'],
+        'compras_mes_unidades': mes_stats['compras_unidades'],
+        'compras_mes_usd': mes_stats['compras_usd'],
     }
     return Response(data)
 
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+def alertas_stock_view(request):
+    alertas = Articulo.objects.filter(
+        stock__lte=F('stock_minimo')
+    ).select_related('categoria', 'proveedor')
+    data = [{
+        'id': a.id,
+        'codigo_inventario': a.codigo_inventario,
+        'nombre': a.nombre,
+        'stock': a.stock,
+        'stock_minimo': a.stock_minimo,
+        'estado': 'agotado' if a.stock == 0 else 'bajo',
+        'categoria_nombre': a.categoria.nombre if a.categoria else None,
+        'proveedor_nombre': a.proveedor.nombre if a.proveedor else None,
+        'precio_compra': float(a.precio_compra) if a.precio_compra else None,
+    } for a in alertas]
+    return Response(data)
+
+
 def export_articulos_excel(request):
     wb = Workbook()
     ws = wb.active
-    ws.title = 'Artículos'
+    ws.title = 'Articulos'
 
-    headers = ['Código', 'Nombre', 'Descripción', 'Categoría', 'Ubicación', 'Responsable',
-               'Estado', 'Fecha Adquisición', 'Valor', 'Marca', 'Modelo', 'Nº Serie']
+    headers = ['Codigo', 'Nombre', 'Descripcion', 'Categoria', 'Ubicacion', 'Proveedor',
+               'Stock', 'Stock Minimo', 'Precio Compra', 'Precio Venta',
+               'Estado', 'Marca', 'Modelo', 'N Serie']
     ws.append(headers)
 
-    articulos = Articulo.objects.select_related('categoria', 'ubicacion', 'responsable').all()
+    articulos = Articulo.objects.select_related('categoria', 'ubicacion', 'proveedor').all()
     for a in articulos:
         ws.append([
             a.codigo_inventario, a.nombre, a.descripcion,
             a.categoria.nombre if a.categoria else '',
             str(a.ubicacion) if a.ubicacion else '',
-            a.responsable.get_full_name() if a.responsable else '',
-            a.get_estado_display(), a.fecha_adquisicion, float(a.valor) if a.valor else 0,
-            a.marca, a.modelo, a.numero_serie,
+            a.proveedor.nombre if a.proveedor else '',
+            a.stock, a.stock_minimo,
+            float(a.precio_compra) if a.precio_compra else 0,
+            float(a.precio_venta) if a.precio_venta else 0,
+            a.get_estado_display(), a.marca, a.modelo, a.numero_serie,
         ])
 
     response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
@@ -148,6 +202,24 @@ class UsuarioViewSet(viewsets.ModelViewSet):
         if self.action == 'list':
             return UsuarioListSerializer
         return UsuarioSerializer
+
+
+class ProveedorViewSet(viewsets.ModelViewSet):
+    queryset = Proveedor.objects.all()
+    serializer_class = ProveedorSerializer
+    permission_classes = [IsAuthenticated, IsAdminOrOperador]
+    filter_backends = [filters.SearchFilter]
+    search_fields = ['nombre', 'contacto']
+    pagination_class = None
+
+
+class ClienteViewSet(viewsets.ModelViewSet):
+    queryset = Cliente.objects.all()
+    serializer_class = ClienteSerializer
+    permission_classes = [IsAuthenticated, IsAdminOrOperador]
+    filter_backends = [filters.SearchFilter]
+    search_fields = ['nombre', 'contacto']
+    pagination_class = None
 
 
 class CategoriaViewSet(viewsets.ModelViewSet):
@@ -170,12 +242,12 @@ class UbicacionViewSet(viewsets.ModelViewSet):
 
 
 class ArticuloViewSet(viewsets.ModelViewSet):
-    queryset = Articulo.objects.select_related('categoria', 'ubicacion', 'responsable').all()
+    queryset = Articulo.objects.select_related('categoria', 'ubicacion', 'proveedor').all()
     permission_classes = [IsAuthenticated, IsAdminOrOperador]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['estado', 'categoria', 'ubicacion', 'responsable']
+    filterset_fields = ['estado', 'categoria', 'ubicacion', 'proveedor']
     search_fields = ['codigo_inventario', 'nombre', 'marca', 'modelo', 'numero_serie', 'descripcion']
-    ordering_fields = ['nombre', 'codigo_inventario', 'fecha_creacion', 'fecha_adquisicion', 'valor']
+    ordering_fields = ['nombre', 'codigo_inventario', 'fecha_creacion', 'stock', 'precio_venta']
 
     def get_serializer_class(self):
         if self.action == 'list':
@@ -186,10 +258,14 @@ class ArticuloViewSet(viewsets.ModelViewSet):
     def exportar(self, request):
         return export_articulos_excel(request)
 
+    @action(detail=False, methods=['get'], url_path='alertas')
+    def alertas(self, request):
+        return alertas_stock_view(request)
+
 
 class MovimientoViewSet(viewsets.ModelViewSet):
     queryset = Movimiento.objects.select_related(
-        'articulo', 'usuario', 'ubicacion_origen', 'ubicacion_destino'
+        'articulo', 'usuario', 'proveedor', 'cliente'
     ).all()
     serializer_class = MovimientoSerializer
     permission_classes = [IsAuthenticated, IsAdminOrOperador]
@@ -199,18 +275,46 @@ class MovimientoViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         movimiento = serializer.save()
         articulo = movimiento.articulo
-        tipo = movimiento.tipo
+        cantidad = movimiento.cantidad
 
-        if tipo == 'salida' or tipo == 'prestamo':
-            articulo.estado = 'prestado'
-        elif tipo == 'entrada' or tipo == 'devolucion':
+        if movimiento.tipo == 'entrada':
+            articulo.stock += cantidad
+        elif movimiento.tipo == 'salida':
+            articulo.stock = max(0, articulo.stock - cantidad)
+        elif movimiento.tipo == 'devolucion':
+            articulo.stock += cantidad
+        elif movimiento.tipo == 'ajuste':
+            articulo.stock = cantidad
+
+        if articulo.stock == 0:
+            articulo.estado = 'agotado'
+        elif articulo.stock <= articulo.stock_minimo:
             articulo.estado = 'disponible'
-        elif tipo == 'mantenimiento':
-            articulo.estado = 'mantenimiento'
-        elif tipo == 'baja':
-            articulo.estado = 'dado_de_baja'
-
-        if tipo == 'traslado' and movimiento.ubicacion_destino:
-            articulo.ubicacion = movimiento.ubicacion_destino
+        else:
+            articulo.estado = 'disponible'
 
         articulo.save()
+
+
+@api_view(['GET', 'PUT'])
+@permission_classes([IsAuthenticated])
+def configuracion_view(request):
+    if request.method == 'GET':
+        tasa = TasaDolar.objects.first()
+        if tasa:
+            return Response({'id': tasa.id, 'tasa': float(tasa.tasa), 'fecha_actualizacion': tasa.fecha_actualizacion})
+        return Response({'id': None, 'tasa': 1.0, 'fecha_actualizacion': None})
+
+    if request.method == 'PUT':
+        if request.user.rol != 'admin':
+            return Response({'error': 'Solo administradores'}, status=status.HTTP_403_FORBIDDEN)
+        tasa_valor = request.data.get('tasa')
+        if tasa_valor is None:
+            return Response({'error': 'tasa requerida'}, status=status.HTTP_400_BAD_REQUEST)
+        tasa = TasaDolar.objects.first()
+        if tasa:
+            tasa.tasa = tasa_valor
+            tasa.save()
+        else:
+            tasa = TasaDolar.objects.create(tasa=tasa_valor)
+        return Response({'id': tasa.id, 'tasa': float(tasa.tasa), 'fecha_actualizacion': tasa.fecha_actualizacion})

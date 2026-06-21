@@ -9,6 +9,9 @@ import CategoriasPage from './pages/CategoriasPage'
 import UbicacionesPage from './pages/UbicacionesPage'
 import MovimientosPage from './pages/MovimientosPage'
 import UsuariosPage from './pages/UsuariosPage'
+import ProveedoresPage from './pages/ProveedoresPage'
+import ClientesPage from './pages/ClientesPage'
+import AlertasPage from './pages/AlertasPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -29,9 +32,12 @@ function App() {
             <Route element={<DashboardLayout />}>
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/articulos" element={<ArticulosPage />} />
+              <Route path="/movimientos" element={<MovimientosPage />} />
+              <Route path="/alertas" element={<AlertasPage />} />
+              <Route path="/proveedores" element={<ProveedoresPage />} />
+              <Route path="/clientes" element={<ClientesPage />} />
               <Route path="/categorias" element={<CategoriasPage />} />
               <Route path="/ubicaciones" element={<UbicacionesPage />} />
-              <Route path="/movimientos" element={<MovimientosPage />} />
               <Route element={<AdminRoute />}>
                 <Route path="/usuarios" element={<UsuariosPage />} />
               </Route>

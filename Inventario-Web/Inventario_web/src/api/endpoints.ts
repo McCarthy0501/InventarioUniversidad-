@@ -2,7 +2,8 @@ import api from './client'
 import type {
   LoginResponse, Usuario, PaginatedResponse,
   Categoria, Ubicacion, Articulo, Movimiento,
-  DashboardData, ArticuloFormData, MovimientoFormData
+  DashboardData, ArticuloFormData, MovimientoFormData,
+  Proveedor, Cliente, AlertaStock, Configuracion
 } from '../types'
 
 export const authApi = {
@@ -38,6 +39,20 @@ export const ubicacionesApi = {
   delete: (id: number) => api.delete(`/ubicaciones/${id}/`),
 }
 
+export const proveedoresApi = {
+  list: () => api.get<Proveedor[]>('/proveedores/'),
+  create: (data: Partial<Proveedor>) => api.post<Proveedor>('/proveedores/', data),
+  update: (id: number, data: Partial<Proveedor>) => api.put<Proveedor>(`/proveedores/${id}/`, data),
+  delete: (id: number) => api.delete(`/proveedores/${id}/`),
+}
+
+export const clientesApi = {
+  list: () => api.get<Cliente[]>('/clientes/'),
+  create: (data: Partial<Cliente>) => api.post<Cliente>('/clientes/', data),
+  update: (id: number, data: Partial<Cliente>) => api.put<Cliente>(`/clientes/${id}/`, data),
+  delete: (id: number) => api.delete(`/clientes/${id}/`),
+}
+
 export const movimientosApi = {
   list: (params?: Record<string, string>) =>
     api.get<PaginatedResponse<Movimiento>>('/movimientos/', { params }),
@@ -54,4 +69,13 @@ export const usuariosApi = {
 
 export const dashboardApi = {
   get: () => api.get<DashboardData>('/dashboard/'),
+}
+
+export const alertasApi = {
+  list: () => api.get<AlertaStock[]>('/alertas/'),
+}
+
+export const configuracionApi = {
+  get: () => api.get<Configuracion>('/configuracion/'),
+  update: (tasa: number) => api.put<Configuracion>('/configuracion/', { tasa }),
 }
