@@ -9,9 +9,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Label } from '../components/ui/label'
 import type { Ubicacion } from '../types'
 import { Plus, Pencil, Trash2 } from 'lucide-react'
+import { useAuthStore } from '../store/authStore'
 
 export default function UbicacionesPage() {
   const queryClient = useQueryClient()
+  const user = useAuthStore((s) => s.user)
+  const isConsulta = user?.rol === 'consulta'
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<Ubicacion | null>(null)
   const [form, setForm] = useState({ edificio: '', aula: '', piso: '', descripcion: '' })
@@ -54,6 +57,7 @@ export default function UbicacionesPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Ubicaciones</h1>
+        {!isConsulta && (
         <Dialog open={dialogOpen} onOpenChange={(o) => { setDialogOpen(o); if (!o) resetForm() }}>
           <DialogTrigger asChild>
             <Button size="sm" onClick={() => { resetForm(); setDialogOpen(true) }}>
@@ -74,6 +78,7 @@ export default function UbicacionesPage() {
             </form>
           </DialogContent>
         </Dialog>
+        )}
       </div>
 
       <Card>
@@ -102,10 +107,12 @@ export default function UbicacionesPage() {
                     <TableCell>{u.piso || '-'}</TableCell>
                     <TableCell>{u.descripcion || '-'}</TableCell>
                     <TableCell>
+                      {!isConsulta && (
                       <div className="flex gap-1">
                         <Button size="icon" variant="ghost" onClick={() => openEdit(u)}><Pencil className="h-4 w-4" /></Button>
                         <Button size="icon" variant="ghost" onClick={() => { if (confirm('¿Eliminar esta ubicación?')) deleteMutation.mutate(u.id) }}><Trash2 className="h-4 w-4 text-destructive" /></Button>
                       </div>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}

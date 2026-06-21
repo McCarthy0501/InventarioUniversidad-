@@ -11,6 +11,7 @@ import { Label } from '../components/ui/label'
 import { Input } from '../components/ui/input'
 import { Badge } from '../components/ui/badge'
 import { Plus } from 'lucide-react'
+import { useAuthStore } from '../store/authStore'
 
 const TIPO_VARIANTS: Record<string, string> = {
   entrada: 'bg-green-100 text-green-800',
@@ -21,6 +22,8 @@ const TIPO_VARIANTS: Record<string, string> = {
 
 export default function MovimientosPage() {
   const queryClient = useQueryClient()
+  const user = useAuthStore((s) => s.user)
+  const isConsulta = user?.rol === 'consulta'
   const [tipoFilter, setTipoFilter] = useState('todos')
   const [dialogOpen, setDialogOpen] = useState(false)
   const [form, setForm] = useState<MovimientoFormData>({
@@ -82,6 +85,7 @@ export default function MovimientosPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Movimientos</h1>
+        {!isConsulta && (
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
             <Button size="sm"><Plus className="mr-2 h-4 w-4" />Nuevo Movimiento</Button>
@@ -145,6 +149,7 @@ export default function MovimientosPage() {
             </form>
           </DialogContent>
         </Dialog>
+        )}
       </div>
 
       <Card>

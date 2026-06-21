@@ -10,9 +10,12 @@ import { Label } from '../components/ui/label'
 import { Badge } from '../components/ui/badge'
 import type { Categoria } from '../types'
 import { Plus, Pencil, Trash2 } from 'lucide-react'
+import { useAuthStore } from '../store/authStore'
 
 export default function CategoriasPage() {
   const queryClient = useQueryClient()
+  const user = useAuthStore((s) => s.user)
+  const isConsulta = user?.rol === 'consulta'
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<Categoria | null>(null)
   const [form, setForm] = useState({ nombre: '', descripcion: '' })
@@ -59,6 +62,7 @@ export default function CategoriasPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Categorías</h1>
+        {!isConsulta && (
         <Dialog open={dialogOpen} onOpenChange={(o) => { setDialogOpen(o); if (!o) resetForm() }}>
           <DialogTrigger asChild>
             <Button size="sm" onClick={() => { resetForm(); setDialogOpen(true) }}>
@@ -83,6 +87,7 @@ export default function CategoriasPage() {
             </form>
           </DialogContent>
         </Dialog>
+        )}
       </div>
 
       <Card>
@@ -109,10 +114,12 @@ export default function CategoriasPage() {
                     <TableCell>{c.descripcion || '-'}</TableCell>
                     <TableCell><Badge variant="outline" className={c.activa ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}>{c.activa ? 'Activa' : 'Inactiva'}</Badge></TableCell>
                     <TableCell>
+                      {!isConsulta && (
                       <div className="flex gap-1">
                         <Button size="icon" variant="ghost" onClick={() => openEdit(c)}><Pencil className="h-4 w-4" /></Button>
                         <Button size="icon" variant="ghost" onClick={() => { if (confirm('¿Eliminar esta categoría?')) deleteMutation.mutate(c.id) }}><Trash2 className="h-4 w-4 text-destructive" /></Button>
                       </div>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}

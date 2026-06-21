@@ -11,6 +11,7 @@ import { Label } from '../components/ui/label'
 import { Badge } from '../components/ui/badge'
 import type { Articulo, ArticuloFormData } from '../types'
 import { Plus, Download, Pencil, Trash2, Search } from 'lucide-react'
+import { useAuthStore } from '../store/authStore'
 
 const ESTADO_VARIANTS: Record<string, string> = {
   disponible: 'bg-green-100 text-green-800',
@@ -34,6 +35,8 @@ const emptyForm: ArticuloFormData = {
 
 export default function ArticulosPage() {
   const queryClient = useQueryClient()
+  const user = useAuthStore((s) => s.user)
+  const isConsulta = user?.rol === 'consulta'
   const [search, setSearch] = useState('')
   const [estadoFilter, setEstadoFilter] = useState('todos')
   const [categoriaFilter, setCategoriaFilter] = useState('todos')
@@ -135,6 +138,7 @@ export default function ArticulosPage() {
         <h1 className="text-2xl font-bold">Artículos</h1>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={handleExport}><Download className="mr-2 h-4 w-4" />Exportar Excel</Button>
+          {!isConsulta && (
           <Dialog open={dialogOpen} onOpenChange={(o) => { setDialogOpen(o); if (!o) resetForm() }}>
             <DialogTrigger asChild>
               <Button size="sm" onClick={() => { resetForm(); setDialogOpen(true) }}><Plus className="mr-2 h-4 w-4" />Nuevo Artículo</Button>
@@ -193,6 +197,7 @@ export default function ArticulosPage() {
               </form>
             </DialogContent>
           </Dialog>
+          )}
         </div>
       </div>
 
@@ -269,10 +274,12 @@ export default function ArticulosPage() {
                       <TableCell className="text-xs">{a.proveedor_nombre || '-'}</TableCell>
                       <TableCell><Badge variant="outline" className={ESTADO_VARIANTS[a.estado]}>{ESTADO_LABELS[a.estado]}</Badge></TableCell>
                       <TableCell>
+                        {!isConsulta && (
                         <div className="flex gap-1">
                           <Button size="icon" variant="ghost" onClick={() => openEdit(a)}><Pencil className="h-4 w-4" /></Button>
                           <Button size="icon" variant="ghost" onClick={() => { if (confirm('¿Eliminar este artículo?')) deleteMutation.mutate(a.id) }}><Trash2 className="h-4 w-4 text-destructive" /></Button>
                         </div>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}
