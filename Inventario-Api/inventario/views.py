@@ -7,6 +7,7 @@ from django.contrib.auth import get_user_model, authenticate
 from django.db.models import Count, Sum, F, Q
 from django.utils import timezone
 from datetime import timedelta
+from decimal import Decimal
 from django_filters.rest_framework import DjangoFilterBackend
 from openpyxl import Workbook
 from django.http import HttpResponse
@@ -311,6 +312,12 @@ def configuracion_view(request):
         tasa_valor = request.data.get('tasa')
         if tasa_valor is None:
             return Response({'error': 'tasa requerida'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            tasa_valor = Decimal(str(tasa_valor))
+        except Exception:
+            return Response({'error': 'tasa inválida'}, status=status.HTTP_400_BAD_REQUEST)
+        if tasa_valor <= 0 or tasa_valor > Decimal('999999999999.99'):
+            return Response({'error': 'tasa fuera de rango (0.01 - 999999999999.99)'}, status=status.HTTP_400_BAD_REQUEST)
         tasa = TasaDolar.objects.first()
         if tasa:
             tasa.tasa = tasa_valor

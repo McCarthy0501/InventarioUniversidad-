@@ -137,7 +137,7 @@ class Movimiento(models.Model):
 
 
 class TasaDolar(models.Model):
-    tasa = models.DecimalField(max_digits=10, decimal_places=2)
+    tasa = models.DecimalField(max_digits=14, decimal_places=2)
     fecha_actualizacion = models.DateTimeField(auto_now=True)
 
     class Meta:
